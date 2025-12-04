@@ -1,6 +1,5 @@
 # PromiseGrid: A Reputation Network
 
-## A Non-Technical Introduction for Team Members
 
 *Document prepared: November 30, 2025*
 
