@@ -1,0 +1,588 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PromiseGrid, in Plain English</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --ink:#0e1d1b;
+    --ink-2:#0a1614;
+    --panel:#162824;
+    --panel-2:#1d332e;
+    --line:#2a463f;
+    --text:#efe7d8;
+    --text-dim:#b9c4ba;
+    --text-faint:#7f9189;
+    --gold:#f0b35e;
+    --gold-soft:#caa066;
+    --green:#62cf94;
+    --coral:#e8896b;
+    --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+    --display:'Fraunces',Georgia,serif;
+    --body:'Inter',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:var(--body);
+    color:var(--text);
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #143029 0%, transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, #11231f 0%, transparent 55%),
+      linear-gradient(160deg,var(--ink) 0%, var(--ink-2) 100%);
+    min-height:100vh;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:680px;margin:0 auto;padding:28px 20px 80px}
+
+  /* ---------- Header ---------- */
+  header{display:flex;gap:18px;align-items:center;margin-bottom:8px}
+  .rings{flex:0 0 auto}
+  .rings svg{display:block}
+  .ring-bg{fill:none;stroke:var(--line);stroke-width:2.4}
+  .ring-on{fill:none;stroke:var(--gold);stroke-width:2.8;stroke-linecap:round;
+    filter:drop-shadow(0 0 4px rgba(240,179,94,.45));
+    transition:stroke .5s ease, opacity .5s ease}
+  .ring-count{font-family:var(--display);font-size:15px;fill:var(--text);font-weight:600}
+  .ring-label{font-family:var(--mono);font-size:6.4px;fill:var(--text-faint);letter-spacing:.08em}
+  .titles h1{
+    font-family:var(--display);font-weight:600;font-size:clamp(26px,6vw,38px);
+    line-height:1.02;margin:0 0 4px;letter-spacing:-.01em}
+  .titles h1 em{font-style:italic;color:var(--gold);font-weight:500}
+  .titles p{margin:0;color:var(--text-dim);font-size:14.5px}
+  .xp{font-family:var(--mono);font-size:12px;color:var(--gold-soft);margin-top:6px}
+  .xp b{color:var(--gold)}
+
+  /* ---------- Intro panel ---------- */
+  .lede{
+    margin:22px 0 10px;padding:18px 20px;border:1px solid var(--line);
+    border-left:3px solid var(--gold);border-radius:12px;background:var(--panel);
+    font-family:var(--display);font-size:18px;line-height:1.45;color:var(--text)}
+  .lede span{color:var(--gold)}
+
+  /* ---------- Map of dots ---------- */
+  .map{display:flex;flex-wrap:wrap;gap:7px;margin:18px 0 22px}
+  .dot{width:26px;height:26px;border-radius:7px;border:1px solid var(--line);
+    background:var(--panel);color:var(--text-faint);font-family:var(--mono);font-size:12px;
+    display:grid;place-items:center;cursor:pointer;transition:.18s;padding:0}
+  .dot:hover{border-color:var(--gold-soft);color:var(--text)}
+  .dot.done{background:linear-gradient(180deg,#26443b,#1c352e);border-color:var(--gold);color:var(--gold)}
+  .dot.active{outline:2px solid var(--gold);outline-offset:2px;color:var(--text)}
+
+  /* ---------- Card ---------- */
+  .card{
+    border:1px solid var(--line);border-radius:16px;background:var(--panel);
+    padding:26px 24px;box-shadow:0 18px 50px -30px rgba(0,0,0,.8);
+    animation:rise .4s ease}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .eyebrow{font-family:var(--mono);font-size:12px;color:var(--gold-soft);letter-spacing:.1em;
+    text-transform:uppercase;display:flex;justify-content:space-between;align-items:center}
+  .eyebrow .n{color:var(--text-faint)}
+  .card h2{font-family:var(--display);font-weight:600;font-size:clamp(22px,5vw,29px);
+    line-height:1.08;margin:10px 0 2px;letter-spacing:-.01em}
+  .plainline{color:var(--gold);font-size:15px;margin:0 0 16px;font-weight:500}
+  .body p{font-size:16px;color:var(--text);margin:0 0 14px}
+  .term{font-family:var(--mono);font-size:.86em;color:var(--gold);background:rgba(240,179,94,.1);
+    padding:1px 6px;border-radius:5px;border:1px solid rgba(240,179,94,.22)}
+  .analogy{display:flex;gap:12px;background:var(--panel-2);border:1px solid var(--line);
+    border-radius:11px;padding:14px 16px;margin:4px 0 22px}
+  .analogy .ic{font-size:20px;line-height:1.2;flex:0 0 auto}
+  .analogy div p{margin:0;font-size:15px;color:var(--text-dim)}
+  .analogy b{color:var(--text);font-weight:600}
+
+  /* ---------- Quiz ---------- */
+  .quiz-q{font-weight:600;font-size:15.5px;margin:0 0 12px;color:var(--text)}
+  .opts{display:flex;flex-direction:column;gap:9px}
+  .opt{text-align:left;border:1px solid var(--line);background:var(--ink-2);
+    color:var(--text);border-radius:10px;padding:13px 15px;font:inherit;font-size:15px;
+    cursor:pointer;transition:.14s;display:flex;gap:10px;align-items:flex-start}
+  .opt:hover:not(:disabled){border-color:var(--gold-soft);transform:translateX(2px)}
+  .opt:disabled{cursor:default}
+  .opt .k{font-family:var(--mono);font-size:13px;color:var(--text-faint);flex:0 0 auto;margin-top:1px}
+  .opt.correct{border-color:var(--green);background:rgba(98,207,148,.14);color:var(--text)}
+  .opt.correct .k{color:var(--green)}
+  .opt.wrong{border-color:var(--coral);background:rgba(232,137,107,.12)}
+  .opt.wrong .k{color:var(--coral)}
+  .feedback{margin:16px 0 0;padding:14px 16px;border-radius:11px;font-size:15px;display:none}
+  .feedback.show{display:block;animation:pop .35s ease}
+  @keyframes pop{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+  .feedback.good{background:rgba(98,207,148,.12);border:1px solid rgba(98,207,148,.4);color:var(--text)}
+  .feedback.bad{background:rgba(232,137,107,.1);border:1px solid rgba(232,137,107,.35);color:var(--text)}
+  .feedback .hd{font-family:var(--display);font-size:17px;font-weight:600;display:block;margin-bottom:3px}
+  .feedback.good .hd{color:var(--green)}
+  .feedback.bad .hd{color:var(--coral)}
+  .streak{font-family:var(--mono);font-size:12px;color:var(--gold);margin-left:8px}
+
+  /* ---------- Nav ---------- */
+  .nav{display:flex;justify-content:space-between;gap:12px;margin-top:24px}
+  .btn{font:inherit;font-size:15px;font-weight:600;border-radius:10px;padding:12px 20px;cursor:pointer;
+    border:1px solid var(--line);background:var(--panel-2);color:var(--text);transition:.15s}
+  .btn:hover:not(:disabled){border-color:var(--gold-soft)}
+  .btn:disabled{opacity:.35;cursor:default}
+  .btn.primary{background:linear-gradient(180deg,#f0b35e,#d9974a);color:#241405;border-color:transparent}
+  .btn.primary:hover{filter:brightness(1.06)}
+
+  /* ---------- Decoder ---------- */
+  .decoder{margin-top:14px}
+  .decoder h3{font-family:var(--display);font-weight:600;font-size:24px;margin:0 0 4px}
+  .decoder .sub{color:var(--text-dim);font-size:14.5px;margin:0 0 18px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .flip{height:96px;perspective:900px;cursor:pointer;background:none;border:0;padding:0;font:inherit}
+  .flip-in{position:relative;width:100%;height:100%;transition:transform .5s;transform-style:preserve-3d}
+  .flip.on .flip-in{transform:rotateY(180deg)}
+  .face{position:absolute;inset:0;backface-visibility:hidden;border:1px solid var(--line);
+    border-radius:11px;padding:12px;display:flex;flex-direction:column;justify-content:center;text-align:left}
+  .front{background:var(--panel-2)}
+  .front .t{font-family:var(--mono);font-size:15px;color:var(--gold);margin-bottom:4px}
+  .front .h{font-size:11px;color:var(--text-faint);font-family:var(--mono)}
+  .back{background:linear-gradient(180deg,#22403a,#1a322c);transform:rotateY(180deg);
+    border-color:var(--gold-soft)}
+  .back p{margin:0;font-size:12.5px;color:var(--text);line-height:1.4}
+
+  /* ---------- Finale ---------- */
+  .finale{text-align:center;padding:34px 24px}
+  .finale .big{font-family:var(--display);font-size:40px;font-weight:600;margin:0 0 6px;color:var(--gold)}
+  .finale p{color:var(--text-dim);font-size:16px;max-width:46ch;margin:0 auto 10px}
+  .finale .next{margin-top:18px;padding:16px 18px;border:1px solid var(--line);border-radius:12px;
+    background:var(--panel);text-align:left}
+  .finale .next b{color:var(--text)}
+
+  .footer{margin-top:30px;text-align:center;font-family:var(--mono);font-size:11.5px;color:var(--text-faint)}
+  .reset{background:none;border:0;color:var(--text-faint);font:inherit;font-size:11.5px;
+    text-decoration:underline;cursor:pointer}
+  .reset:hover{color:var(--coral)}
+
+  @media (max-width:480px){
+    header{flex-direction:row;gap:14px}
+    .lede{font-size:16px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+  }
+  :focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:6px}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="rings" id="rings" aria-hidden="true"></div>
+    <div class="titles">
+      <h1>PromiseGrid, <em>in plain English</em></h1>
+      <p>Nine small ideas. One at a time. No jargon ambushes.</p>
+      <div class="xp" id="xp">0 XP · 0 concepts mastered</div>
+    </div>
+  </header>
+
+  <div class="lede">
+    The whole heart of it: a way to build a group's shared tools and records so they
+    <span>survive for decades</span> — through the founder leaving, the company dying,
+    the platform shutting down, even the group splitting in two — without depending on
+    any single company, server, or boss.
+  </div>
+
+  <div class="map" id="map" role="tablist" aria-label="Concept progress"></div>
+
+  <div id="stage"></div>
+
+  <div class="footer">
+    Built as a layperson primer for the PromiseGrid dev guide ·
+    <button class="reset" id="reset">reset my progress</button>
+  </div>
+</div>
+
+<script>
+const LESSONS = [
+  {
+    tag:"The core idea",
+    title:"Tools that outlive their makers",
+    plain:"Build the shared stuff so it keeps working after the people who built it are gone.",
+    body:[
+      "Most software dies with its owner. The company folds, the founder leaves, the platform shuts down — and the community's shared records and ways of working vanish with it.",
+      "PromiseGrid's bet is that communities last longer when the systems they rely on stay <b>understandable, copyable, and answerable to the people using them</b> — not locked inside one vendor."
+    ],
+    icon:"🌱",
+    analogy:"A community garden designed so it keeps producing even after every original gardener has moved on and the tool shed has been rebuilt three times. The garden, not any one gardener, is the point.",
+    q:"What's the main thing PromiseGrid is trying to protect against?",
+    opts:[
+      "Slow websites and bad design",
+      "A community losing its shared records when the founder, company, or platform goes away",
+      "Hackers stealing passwords",
+      "People writing buggy code"
+    ],
+    correct:1,
+    why:"Exactly. It's about <b>continuity</b> — surviving turnover, churn, and shutdowns — not speed or aesthetics.",
+    nudge:"Think bigger than any one outage. The fear here is the whole community losing its shared stuff when a key player disappears."
+  },
+  {
+    tag:"The time horizon",
+    title:"The 100-year question",
+    plain:"Would these records still make sense a century from now?",
+    body:[
+      "PromiseGrid uses a deliberately extreme yardstick: imagine the community in <b>year 30, or year 100</b>. The original people are gone, the software's been replaced more than once, maybe there's been a split or a merger.",
+      "The design test is simple: would the important records, commitments, and identities still be <b>legible</b> — still make sense — after all that change?"
+    ],
+    icon:"🕰️",
+    analogy:"Building a cathedral you know you'll never see finished. You make choices for people who aren't born yet, using nothing but what you can write down clearly enough to last.",
+    q:"Why does PromiseGrid keep talking about a 100-year horizon?",
+    opts:[
+      "It's a guess at how long the company will exist",
+      "It's a stress test: will the records still make sense after generations of change?",
+      "Contracts legally last 100 years",
+      "It's how long the data is backed up for"
+    ],
+    correct:1,
+    why:"Right — the long horizon is a <b>thinking tool</b>. If something can't survive a century of turnover, the design needs work.",
+    nudge:"It's not a backup policy or a legal term. It's a way of pressure-testing whether the design survives time itself."
+  },
+  {
+    tag:"The structure",
+    title:"No one in charge of everything",
+    plain:"No single company, server, or permanent boss is required to keep the group alive.",
+    body:[
+      "\u201cNo central authority\u201d means the system isn't supposed to depend on one company, one server, one registry, or one permanent leadership seat to keep going.",
+      "It does <b>not</b> mean conflict disappears. It means disagreements, mistakes, and leadership changes have to be <b>survivable</b> — without everyone losing the shared record when the center wobbles."
+    ],
+    icon:"🕸️",
+    analogy:"A potluck instead of a restaurant. There's no single kitchen that, if it closes, ends dinner forever. Everyone holds a piece, so no one closure ends the meal.",
+    q:"\u201cNo central authority\u201d mainly means…",
+    opts:[
+      "There are no rules at all",
+      "Conflict never happens",
+      "No single company/server/boss is needed to keep the community going",
+      "One elected leader runs everything fairly"
+    ],
+    correct:2,
+    why:"That's it. The goal isn't zero conflict — it's making conflict and turnover <b>survivable</b> without a single point of failure.",
+    nudge:"It's not anarchy and it's not one fair leader. It's the absence of a single required center."
+  },
+  {
+    tag:"Disagreement",
+    title:"Splitting up is allowed",
+    plain:"When people truly disagree, they can fork into two paths — without it being a disaster.",
+    body:[
+      "Over decades, communities <b>will</b> hit real disagreement about rules, priorities, or leadership. A system that pretends otherwise will shatter the first time it happens.",
+      "PromiseGrid treats <b>forking</b> — splitting into a sibling path — as normal, not as an embarrassment. A fork lets a group separate, continue, and stay traceable instead of being forced into one final answer forever."
+    ],
+    icon:"🌿",
+    analogy:"A recipe everyone's allowed to branch. Grandma's original and the vegan rewrite both stay legitimate, and you can always trace which came from which. Nobody has to 'win.'",
+    q:"In PromiseGrid, a fork is…",
+    opts:[
+      "A bug that corrupts the data",
+      "A normal, traceable way for a community to split and both sides continue",
+      "Something only the central authority can approve",
+      "A permanent ban on the losing side"
+    ],
+    correct:1,
+    why:"Yep. Forking is a <b>feature</b>: peaceful separation that keeps history legible, not a failure state.",
+    nudge:"Reframe it: disagreement is inevitable, so the system makes splitting graceful instead of catastrophic."
+  },
+  {
+    tag:"Identity of things",
+    title:"A fingerprint for documents",
+    plain:"Point to the exact same record forever — by its contents, not by a link that can break.",
+    body:[
+      "If an agreement gets copied, moved to a new vendor, or mirrored in five places, people still need to say \u201cthis is the <b>exact same</b> document\u201d — not argue over whichever link happened to work that day.",
+      "PromiseGrid gives each frozen record a content fingerprint. A <span class='term'>pCID</span> names a protocol spec; a <span class='term'>doc-CID</span> names one exact document. Same fingerprint = same content, guaranteed, no matter where it lives."
+    ],
+    icon:"🔖",
+    analogy:"Identifying a book by a fingerprint of its actual contents, instead of 'the book on the third shelf.' Someone can move the shelf or swap the book — but the fingerprint only ever matches the real thing.",
+    q:"What's a pCID / doc-CID for?",
+    opts:[
+      "Making links shorter",
+      "Hiding documents from outsiders",
+      "Naming the exact same record by its contents, so it stays findable across moves and copies",
+      "Storing your password"
+    ],
+    correct:2,
+    why:"Right. It's <b>content-addressed identity</b> — the name comes from the bytes, so the reference can't silently point at the wrong thing.",
+    nudge:"It's not about hiding or shortening. It's about pinning down 'the exact same thing' even after it's been copied around."
+  },
+  {
+    tag:"Trust",
+    title:"Trust is local — and fixable",
+    plain:"Trust is earned per relationship and per task, and it can be rebuilt after a break.",
+    body:[
+      "Trust here isn't a global score handed out once by a central referee. It's <b>local</b> and <b>per burden</b> — meaning you trust a specific person for a specific kind of thing.",
+      "And it's <b>repairable</b>. Relationships break and get rebuilt. The system expects communities to update who they rely on and continue after breaks, rather than depending on one always-right center to settle everything forever."
+    ],
+    icon:"🤝",
+    analogy:"You trust your mechanic with your car, not your taxes — and if they botch one job, trust can be rebuilt over time. There's no central judge issuing a permanent 'trustworthy' stamp.",
+    q:"\u201cTrust is local and per burden\u201d means…",
+    opts:[
+      "One central score decides who's trustworthy for everything",
+      "You trust specific people for specific things, and trust can be repaired",
+      "Once trust breaks, it's gone forever",
+      "Everyone is trusted equally by default"
+    ],
+    correct:1,
+    why:"Exactly — trust is <b>contextual and rebuildable</b>, never a single permanent global verdict.",
+    nudge:"Notice the two words: local (who, for what) and repairable (it can come back). No central, permanent verdict."
+  },
+  {
+    tag:"How things talk",
+    title:"Promises, not just commands",
+    plain:"The system tracks promises and the evidence around them — not just 'do this now.'",
+    body:[
+      "Ordinary software mostly does request-and-reply: call a function, get an answer, done. PromiseGrid is shaped differently. Participants make, receive, and <b>assess promises</b>, and keep the evidence about whether those promises were kept.",
+      "So a message can matter <b>long after</b> it arrives — it might become part of a later dispute, an audit, or a trust judgment. The question isn't only 'did it work right now?' but 'what was promised, under what conditions, and what happened?'"
+    ],
+    icon:"📜",
+    analogy:"A signed IOU versus shouting 'give me $5!' The IOU can be checked, disputed, and weighed as evidence months later. The shout vanishes the moment it's heard.",
+    q:"How is PromiseGrid's model different from ordinary request/reply?",
+    opts:[
+      "It's faster",
+      "It's about making and later assessing promises, keeping evidence over time",
+      "It doesn't use messages at all",
+      "It only works offline"
+    ],
+    correct:1,
+    why:"Right. Think <b>obligations + evidence over time</b>, not just instant call-and-response. This is the bridge into the App Dev mindset.",
+    nudge:"The key shift is time. A promise (and the proof around it) can still matter long after the moment it was made."
+  },
+  {
+    tag:"Continuity",
+    title:"Passing the baton",
+    plain:"Records keep a stable identity; leadership can rotate or be inherited without confusing everyone.",
+    body:[
+      "Some things must stay recognizable even when a website, vendor, or file location changes. And someone has to be able to <b>hand off</b> responsibility without making the whole history ambiguous.",
+      "PromiseGrid is built so records keep a durable identity and authority can <b>rotate, continue, or be inherited</b> in a way that stays legible to everyone who depends on it."
+    ],
+    icon:"🏃",
+    analogy:"A relay race. The runners change hands, but the baton — and the continuity of the race — doesn't drop. The handoff is the whole skill.",
+    q:"What does 'durable identity and handoff of authority' protect?",
+    opts:[
+      "The ability to change leadership without losing a clear, continuous history",
+      "The founder's right to stay in charge forever",
+      "The speed of the network",
+      "The secrecy of the records"
+    ],
+    correct:0,
+    why:"Yes — continuity through change. New people can take over <b>without</b> the record becoming ambiguous.",
+    nudge:"It's about change without confusion: who's responsible can shift while the history stays clear and unbroken."
+  },
+  {
+    tag:"Reading the guide",
+    title:"Draft vs. frozen",
+    plain:"Trust the 'frozen' specs. Treat everything else as orientation, not gospel.",
+    body:[
+      "Big chunks of PromiseGrid are still being figured out. The guide is careful to separate two things: <span class='term'>frozen</span> specs (stable, citable by their pCID fingerprint) versus <span class='term'>draft</span> work — experiments, simulations, thought experiments, TODOs.",
+      "The rule for a reader: <b>frozen specs are the authority</b> for the protocol they name. Drafts and simulations are useful background and direction — but never treat them as a settled contract."
+    ],
+    icon:"🧊",
+    analogy:"A passed law versus a bill still being debated. You can build on the law and cite it. The working draft is just where the thinking is happening — don't quote it as if it's final.",
+    q:"When the guide shows a simulation or draft, you should…",
+    opts:[
+      "Treat it as the final, binding rule",
+      "Ignore it completely",
+      "Read it as provisional orientation, and rely on frozen specs for what's actually settled",
+      "Assume it's a mistake"
+    ],
+    correct:2,
+    why:"Perfect. <b>Frozen = authority, draft = orientation.</b> Knowing which is which is half of reading this guide well.",
+    nudge:"Two buckets: frozen (cite it, build on it) and draft (learn from it, don't lean on it). Drafts aren't wrong — just not final."
+  }
+];
+
+const N = LESSONS.length;
+const KEY = "pg_plain_english_v1";
+let state = { done:{}, xp:0, streak:0, best:0 };
+let current = 0;
+let memoryFallback = {};
+
+/* ---------- persistence (graceful) ---------- */
+async function load(){
+  try{
+    if(window.storage && window.storage.get){
+      const r = await window.storage.get(KEY);
+      if(r && r.value) state = JSON.parse(r.value);
+    } else if(memoryFallback[KEY]){ state = memoryFallback[KEY]; }
+  }catch(e){ /* first run / no key */ }
+  if(!state.done) state = { done:{}, xp:0, streak:0, best:0 };
+}
+async function save(){
+  try{
+    if(window.storage && window.storage.set){
+      await window.storage.set(KEY, JSON.stringify(state));
+    } else { memoryFallback[KEY] = state; }
+  }catch(e){ memoryFallback[KEY] = state; }
+}
+
+/* ---------- rings ---------- */
+function drawRings(){
+  const size=92, cx=size/2, cy=size/2;
+  const doneCount = Object.keys(state.done).length;
+  let circles="";
+  for(let i=0;i<N;i++){
+    const r = 9 + i*3.6;
+    const on = i < doneCount;
+    circles += `<circle class="${on?'ring-on':'ring-bg'}" cx="${cx}" cy="${cy}" r="${r}" `+
+               `${on?'':'opacity=".55"'} />`;
+  }
+  document.getElementById('rings').innerHTML =
+    `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+       ${circles}
+       <text class="ring-count" x="${cx}" y="${cy-1}" text-anchor="middle" dominant-baseline="middle">${doneCount}/${N}</text>
+       <text class="ring-label" x="${cx}" y="${cy+11}" text-anchor="middle">RINGS</text>
+     </svg>`;
+}
+
+function updateMeta(){
+  drawRings();
+  const c = Object.keys(state.done).length;
+  document.getElementById('xp').innerHTML =
+    `<b>${state.xp}</b> XP · ${c} of ${N} concepts mastered`+
+    (state.best>1?` · best streak ${state.best}`:``);
+  drawMap();
+}
+
+/* ---------- map ---------- */
+function drawMap(){
+  const m=document.getElementById('map'); m.innerHTML="";
+  for(let i=0;i<N;i++){
+    const b=document.createElement('button');
+    b.className="dot"+(state.done[i]?" done":"")+(i===current?" active":"");
+    b.textContent = state.done[i] ? "✓" : (i+1);
+    b.title = LESSONS[i].title;
+    b.setAttribute('role','tab');
+    b.onclick=()=>{ current=i; render(); };
+    m.appendChild(b);
+  }
+  // decoder tab
+  const d=document.createElement('button');
+  d.className="dot"+(current===N?" active":"");
+  d.textContent="✦"; d.title="Jargon decoder";
+  d.onclick=()=>{ current=N; render(); };
+  m.appendChild(d);
+}
+
+/* ---------- render a lesson ---------- */
+function render(){
+  updateMeta();
+  const stage=document.getElementById('stage');
+  if(current>=N){ return renderDecoder(); }
+  const L=LESSONS[current];
+  const answered = state.done[current];
+
+  stage.innerHTML = `
+    <div class="card">
+      <div class="eyebrow"><span>${L.tag}</span><span class="n">${String(current+1).padStart(2,'0')} / ${String(N).padStart(2,'0')}</span></div>
+      <h2>${L.title}</h2>
+      <div class="plainline">${L.plain}</div>
+      <div class="body">${L.body.map(p=>`<p>${p}</p>`).join("")}</div>
+      <div class="analogy"><div class="ic">${L.icon}</div><div><p><b>Picture it:</b> ${L.analogy}</p></div></div>
+
+      <div class="quiz">
+        <p class="quiz-q">Quick check ${L.q}</p>
+        <div class="opts" id="opts">
+          ${L.opts.map((o,i)=>`<button class="opt" data-i="${i}"><span class="k">${String.fromCharCode(65+i)}</span><span>${o}</span></button>`).join("")}
+        </div>
+        <div class="feedback" id="fb"></div>
+      </div>
+
+      <div class="nav">
+        <button class="btn" id="prev" ${current===0?'disabled':''}>← Back</button>
+        <button class="btn primary" id="next">${current===N-1?'Finish →':'Next →'}</button>
+      </div>
+    </div>`;
+
+  const opts=[...stage.querySelectorAll('.opt')];
+  const fb=stage.querySelector('#fb');
+
+  // if already mastered, show the answered state immediately
+  if(answered){ lock(L.correct, true); }
+
+  opts.forEach(btn=>btn.onclick=()=>{
+    const i=+btn.dataset.i;
+    const right = i===L.correct;
+    opts.forEach(b=>b.disabled=true);
+    btn.classList.add(right?'correct':'wrong');
+    if(!right) opts[L.correct].classList.add('correct');
+
+    if(right){
+      const firstTime = !state.done[current];
+      if(firstTime){
+        state.done[current]=true;
+        state.xp+=10;
+        state.streak+=1;
+        state.best=Math.max(state.best,state.streak);
+        save();
+      }
+      const streakTxt = state.streak>=2 ? ` <span class="streak">🔥 ${state.streak} in a row</span>`:``;
+      fb.className="feedback good show";
+      fb.innerHTML=`<span class="hd">Nice.${firstTime?` +10 XP`:``}</span>${L.why}${streakTxt}`;
+      updateMeta();
+    } else {
+      state.streak=0; save();
+      fb.className="feedback bad show";
+      fb.innerHTML=`<span class="hd">Not quite — try again</span>${L.nudge}`;
+      // let them retry: re-enable after a beat
+      setTimeout(()=>{ opts.forEach((b,bi)=>{ if(bi!==L.correct){ b.disabled=false; b.classList.remove('wrong'); }}); },1100);
+      opts[L.correct].classList.remove('correct');
+    }
+  });
+
+  function lock(correctIdx){
+    opts.forEach(b=>b.disabled=true);
+    opts[correctIdx].classList.add('correct');
+    fb.className="feedback good show";
+    fb.innerHTML=`<span class="hd">Mastered ✓</span>${L.why}`;
+  }
+
+  stage.querySelector('#prev').onclick=()=>{ if(current>0){current--;render();} };
+  stage.querySelector('#next').onclick=()=>{ current++; render(); };
+}
+
+/* ---------- decoder ---------- */
+const TERMS=[
+  ["pCID","spec fingerprint","The content-based ID of a protocol spec. Same fingerprint = same exact spec."],
+  ["doc-CID","document fingerprint","The content-based ID of one exact frozen document."],
+  ["agent","a participant","Someone or something that can make, receive, or judge promises."],
+  ["promise","a trackable claim","A protocol-governed commitment that can be checked later."],
+  ["fork","a peaceful split","A sibling path when a group disagrees — traceable, not a failure."],
+  ["kernel","the host engine","The infrastructure that runs the protocol handlers underneath apps."],
+  ["port","a build of the engine","An implementation of that infrastructure on a specific platform."],
+  ["CAS","content store","Content-addressed storage: data is filed and found by its own bytes."],
+  ["chunk","a stored piece","One content-addressed piece of message data inside CAS."],
+  ["conformance claim","an 'I follow this' note","An implementation's explicit statement of which spec it obeys."],
+  ["feed","a delivery lane","A lower layer that moves authenticated messages over some channel."],
+  ["substrate","the ground it runs on","The underlying host or transport a feed depends on."],
+  ["ingress","the front door","The path by which messages first enter the host that routes them."],
+  ["frozen vs draft","final vs working","Frozen = stable, citable authority. Draft = experiment / orientation."]
+];
+function renderDecoder(){
+  const stage=document.getElementById('stage');
+  const mastered = Object.keys(state.done).length===N;
+  stage.innerHTML=`
+    <div class="card decoder">
+      ${mastered?`<div class="finale" style="padding-top:8px">
+          <div class="big">All nine rings 🌳</div>
+          <p>You've got the layperson layer of PromiseGrid. You can now explain the <b>why</b> before anyone hits you with a single acronym.</p>
+          <div class="next"><b>Your next stop (you're an app dev):</b> the <b>App Devs</b> section of the guide — "promises, not commands" (concept 7) is the doorway. Want me to build the App-Dev level of this trainer next?</div>
+        </div>`:''}
+      <h3>Jargon decoder</h3>
+      <p class="sub">Tap any scary term to flip it into plain words. These are the ones the full guide throws around.</p>
+      <div class="grid">
+        ${TERMS.map((t,i)=>`
+          <button class="flip" data-i="${i}" aria-label="Flip ${t[0]}">
+            <div class="flip-in">
+              <div class="face front"><div class="t">${t[0]}</div><div class="h">tap to decode</div></div>
+              <div class="face back"><p><b>${t[1]}.</b><br>${t[2]}</p></div>
+            </div>
+          </button>`).join("")}
+      </div>
+      <div class="nav"><button class="btn" id="back">← Back to concepts</button><span></span></div>
+    </div>`;
+  stage.querySelectorAll('.flip').forEach(f=>f.onclick=()=>f.classList.toggle('on'));
+  stage.querySelector('#back').onclick=()=>{ current=N-1; render(); };
+}
+
+/* ---------- reset ---------- */
+document.getElementById('reset').onclick=async()=>{
+  state={done:{},xp:0,streak:0,best:0}; current=0; await save(); render();
+};
+
+/* ---------- boot ---------- */
+(async()=>{ await load(); render(); })();
+</script>
