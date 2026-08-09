@@ -4,6 +4,8 @@
 **Inputs:** `perf_tests-before_2026-08-08_20-16-01.md` · `perf_tests-after_2026-08-08_20-16-01.md`
 **Machine:** Intel Core i7-1065G7 @ 1.30 GHz, 8 threads · **Go:** go1.26.1 linux/amd64
 **Cache:** cleared (`go clean -cache`) before each sweep, module deps rebuilt untimed
+**Sizes:** 1 → 100,000. (No 1M data yet: a follow-up 1M attempt was aborted —
+its vet step ran 46+ minutes at ~11 GB RSS; see `perf_tests-before_2026-08-08_20-30-04.md`.)
 
 Both sweeps generate N structurally identical functions and time the same
 four runs; the only difference is one line per function:
@@ -16,6 +18,27 @@ m := make(map[string]int, len(items))    // tests-after:  clean — zero finding
 So `before` measures goscalelint over code where **every function reports a
 finding** (N findings), and `after` measures the identical workload with
 **zero findings**.
+
+## What each column means
+
+- **cold** — `goscalelint ./perf/...` on freshly generated code the tool has
+  never seen. Nothing is cached, so it pays for everything: loading the
+  package, parsing, type-checking, running all 17 analyzers, and printing
+  findings. Worst case — what a first CI run on a fresh checkout feels like.
+- **warm** — the exact same command immediately again. The standalone binary
+  keeps no results between runs, so all analysis happens again; only the
+  surrounding I/O is cheaper (OS page cache, Go build cache). The cold−warm
+  gap is one-time setup cost; warm is the binary's floor for repeated runs.
+- **vet 1st** — `go vet -vettool=goscalelint ./perf/...`: Go's vet command
+  driving the same analyzers through the build system. First time through it
+  must still analyze everything, so it lands near warm.
+- **vet 2nd** — the same vet command repeated. vet caches analysis results
+  in the build cache keyed by package contents, so an unchanged package
+  replays the stored result (~0.1 s at any size) instead of re-analyzing.
+
+Practical reading: the standalone binary re-pays full analysis cost on every
+run, while vet only pays for packages that changed — use `go vet -vettool`
+for repeated runs (CI, hooks), the direct binary for one-shot scans.
 
 ## Cold runs (first run after generation)
 
@@ -62,6 +85,14 @@ the second vet run is a pure cache hit regardless of findings.
 every size — confirming the generated code is fully dirty and fully clean
 respectively.
 
+## Repeatability
+
+A second dirty sweep the same evening (`perf_tests-before_2026-08-08_20-30-04.md`,
+aborted at its 1M step but complete through 100k) reproduced the before
+numbers within ~10%: at 100k, cold 60.31 s vs 54.56 s, warm 30.86 s vs
+26.90 s, vet 1st 31.46 s vs 30.55 s. Sub-second rows jitter by ±0.05 s.
+Treat single-run cells at that granularity.
+
 ## Observations
 
 - **Reporting findings is a real cost at scale.** At N = 100,000 the warm
@@ -79,4 +110,8 @@ respectively.
   cache flattens everything to ~0.1 s on the second run — for CI over a
   mostly-unchanged codebase, `go vet -vettool` remains the cheap way to run
   goscalelint repeatedly.
-- Single run per cell; treat sub-second deltas as indicative only.
+- **vet-mode over massive finding counts is its own failure mode.** The
+  aborted 1M attempt showed `go vet -vettool` at one million findings
+  running 46+ minutes at ~11 GB RSS (JSON diagnostic encoding), while the
+  direct binary handled the same package in minutes. For dirty megapackages,
+  use the direct binary; `VET=0` in perftime.sh skips the vet columns.
