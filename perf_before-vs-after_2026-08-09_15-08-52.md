@@ -1,10 +1,10 @@
-# goscalelint timing — dirty vs clean, small-N focus (before vs after)
+# goscalelint timing — dirty vs clean, 1 → 100,000 (before vs after)
 
 **Run:** 2026-08-09_15-08-52
 **Inputs:** `perf_tests-before_2026-08-09_15-08-52.md` · `perf_tests-after_2026-08-09_15-08-52.md`
 **Machine:** Intel Core i7-1065G7 @ 1.30 GHz, 8 threads · **Go:** go1.26.1 linux/amd64
 **Cache:** cleared (`go clean -cache`) before each sweep, module deps rebuilt untimed
-**Sizes:** 1 → 10,000 · **Sampling:** warm and vet 2nd are medians of 5 runs; cold and vet 1st are single-shot by nature
+**Sizes:** 1 → 100,000 (the 100,000 rows ran as a separate same-day invocation with its own cache clear, same procedure) · **Sampling:** warm and vet 2nd are medians of 5 runs; cold and vet 1st are single-shot by nature
 
 Both sweeps generate N structurally identical functions; the only difference
 is one line per function:
@@ -49,6 +49,7 @@ vet 1st vs vet 2nd separates analysis from cache replay.
 | 100 | 0.30 | 0.28 | −0.02 | 0.93× |
 | 1,000 | 0.66 | 0.68 | +0.02 | 1.03× |
 | 10,000 | 5.33 | 5.06 | −0.27 | 0.95× |
+| 100,000 | 78.86 | 50.35 | −28.51 | **0.64×** |
 
 ## Warm runs (median of 5)
 
@@ -59,6 +60,7 @@ vet 1st vs vet 2nd separates analysis from cache replay.
 | 100 | 0.41 | 0.22 | −0.19 | 0.54× |
 | 1,000 | 0.32 | 0.28 | −0.04 | 0.88× |
 | 10,000 | 1.01 | 0.83 | −0.18 | **0.82×** |
+| 100,000 | 42.09 | 8.02 | −34.07 | **0.19×** |
 
 ## go vet -vettool, first run (single sample)
 
@@ -69,6 +71,7 @@ vet 1st vs vet 2nd separates analysis from cache replay.
 | 100 | 0.23 | 0.15 | −0.08 | 0.65× |
 | 1,000 | 0.35 | 0.19 | −0.16 | 0.54× |
 | 10,000 | 1.02 | 0.74 | −0.28 | **0.73×** |
+| 100,000 | 43.30 | 8.13 | −35.17 | **0.19×** |
 
 ## go vet -vettool, second run (median of 5)
 
@@ -79,6 +82,7 @@ vet 1st vs vet 2nd separates analysis from cache replay.
 | 100 | 0.13 | 0.14 | +0.01 |
 | 1,000 | 0.27 | 0.14 | −0.13 |
 | 10,000 | 0.14 | 0.14 | 0.00 |
+| 100,000 | 0.14 | 0.17 | +0.03 |
 
 ## Findings
 
@@ -95,10 +99,13 @@ vet 1st vs vet 2nd separates analysis from cache replay.
   both sides of 1.0×.
 - **At N = 10,000 a small real clean advantage emerges.** With tight
   medians on both sides (±0.02 s), clean is ~18% faster warm (1.01 →
-  0.83 s) and ~27% faster on vet 1st (1.02 → 0.74 s). That is the findings
-  cost becoming visible — much smaller per finding than at 100k, where
-  rendering 100k diagnostics made it ~5×: the findings overhead grows
-  superlinearly with finding count.
+  0.83 s) and ~27% faster on vet 1st (1.02 → 0.74 s).
+- **At N = 100,000 the findings cost dominates — now median-backed.**
+  Clean is 5.2× faster warm (42.09 → 8.02 s, medians tight within ±1 s on
+  both sides) and 5.3× faster on vet 1st (43.30 → 8.13 s). Per finding
+  that is ~0.34 ms at 100k versus ~0.018 ms at 10k — the findings overhead
+  grows superlinearly with finding count, so dirty megapackages pay
+  disproportionately.
 - **vet 2nd is flat ~0.14 s in both sweeps at every size** — replaying
   cached results costs the same whether the replay contains 10,000
   findings or none. (The dirty 1,000 cell's 0.27 s falls in the turbulent
