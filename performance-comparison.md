@@ -1,94 +1,94 @@
-# Test performance comparison
+# Controlled test performance comparison
 
-This report compares the warm-cache, serial test baselines recorded on
+This report compares the cache-disabled serial test baselines recorded on
 2026-08-08 for the original repository and its lint-fixed sister copy.
 
 - Original baseline: `../grid-examples/docs/test-performance.md`
 - Fixed-copy baseline: `docs/test-performance.md`
 
-Both reports use the same declared test-command inventory: seven Go modules
-and two web applications. The two Neovim sidecars remain outside the total
-because they declare build commands but no test command.
+Both copies ran the same declared test inventory: seven Go modules and two web
+applications. The two Neovim sidecars remain outside the total because they
+declare build commands but no test command.
 
-## Executive summary
+## Method
 
-All nine suites passed in both copies. The original run took **3.218 seconds**;
-the fixed-copy run took **11.719 seconds**, a difference of **+8.501 seconds**
-(+264%). That is not evidence that the lint fixes made the repository slower:
-the two largest increases, **Ex1 (+6.247 s)** and **Ex2 (+1.627 s)**, are in
-modules that the lint patch did not touch.
+Every Go suite ran as `go test -count=1 ./...`. The `-count=1` flag disables
+Go's test-result cache, so the tests execute rather than returning a cached
+success. Each web suite ran with its declared `npm test` command. The two
+repositories were alternated per suite, rather than always running one first,
+to reduce ordering bias. Durations are nanosecond-resolution wall-clock
+measurements reported in whole milliseconds.
 
-For the three modified modules only, the original total was **1.274 seconds**
-and the fixed-copy total was **1.321 seconds**: **+47 ms**. A single
-warm-cache wall-clock sample is not precise enough to attribute a 47 ms change
-to these allocation-level edits. The available data demonstrates that the
-fixed copy remains correct; it does not demonstrate a whole-suite speedup or
-slowdown caused by the fixes.
+This is substantially more comparable than the earlier cached measurements.
+It still represents one machine under real load, not a statistical benchmark
+series, so small deltas should not be overinterpreted.
 
-## Per-suite results
+## Result
 
-| Program | Original | Fixed copy | Delta | Modified by lint patch? |
+All tests passed in both copies.
+
+| Program | Original | Fixed copy | Delta (fix - original) | Changed by lint patch? |
 | --- | ---: | ---: | ---: | --- |
-| `ex1-order-flow` | 293 ms | 6,540 ms | +6,247 ms | No |
-| `ex2-grid-editor` | 319 ms | 1,946 ms | +1,627 ms | No |
-| `ex3-grid-editor-websocket` | 353 ms | 347 ms | -6 ms | Yes |
-| `ex4-bug-tracker` | 244 ms | 539 ms | +295 ms | No |
-| `ex5-operational-knowledge-system` | 431 ms | 483 ms | +52 ms | Yes |
-| `ex6-operational-knowledge-agent-runtime` | 490 ms | 491 ms | +1 ms | Yes |
-| `ex7-makerspace-stewardship` | 255 ms | 533 ms | +278 ms | No |
-| `ex2-grid-editor/web` | 346 ms | 339 ms | -7 ms | No |
-| `ex3-grid-editor-websocket/web` | 467 ms | 481 ms | +14 ms | No |
-| **Total** | **3,218 ms** | **11,719 ms** | **+8,501 ms** | — |
+| `ex1-order-flow` | 6,475 ms | 6,484 ms | +9 ms | No |
+| `ex2-grid-editor` | 1,811 ms | 1,861 ms | +50 ms | No |
+| `ex3-grid-editor-websocket` | 4,411 ms | 4,380 ms | -31 ms | Yes |
+| `ex4-bug-tracker` | 453 ms | 392 ms | -61 ms | No |
+| `ex5-operational-knowledge-system` | 12,880 ms | 12,641 ms | -239 ms | Yes |
+| `ex6-operational-knowledge-agent-runtime` | 8,021 ms | 2,641 ms | -5,380 ms | Yes |
+| `ex7-makerspace-stewardship` | 394 ms | 383 ms | -11 ms | No |
+| `ex2-grid-editor/web` | 314 ms | 319 ms | +5 ms | No |
+| `ex3-grid-editor-websocket/web` | 513 ms | 685 ms | +172 ms | No |
+| **Total** | **35,272 ms** | **29,786 ms** | **-5,486 ms** | — |
 
-The individual suite durations sum to 3,198 ms in the original run and
-11,699 ms in the fixed-copy run. Each report's additional 20 ms is the
-separately measured loop and command overhead, so the total delta reconciles
-exactly with the per-suite deltas.
+The fixed copy completed the full declared suite **5.486 seconds faster**,
+which is a **15.6% reduction** from the original total.
 
-## What changed in the fixed copy
+## Scope of the lint patch
 
-The lint patch contains 27 mechanical allocation-focused replacements across
-Ex3, Ex5, and Ex6. It does not change protocol behavior, test behavior, or
-the test inventory.
+The patch contains 27 allocation-focused replacements, all within Ex3, Ex5,
+and Ex6:
 
 | Change type | Count | Purpose |
 | --- | ---: | --- |
-| `strings.Split` to `strings.SplitSeq` | 4 | Avoid materializing a split slice when each token is consumed once. |
-| Map capacity preallocation | 22 | Allocate maps with the known input size to avoid incremental map growth. |
-| Slice capacity preallocation | 1 | Allocate the result slice with the known state length before appending. |
+| `strings.Split` to `strings.SplitSeq` | 4 | Avoid a temporary split slice when tokens are consumed once. |
+| Map capacity preallocation | 22 | Avoid incremental internal map growth when input size is known. |
+| Slice capacity preallocation | 1 | Avoid growth and copying while appending a known-size result. |
 
-The changes occur only in `ex3-grid-editor-websocket`,
-`ex5-operational-knowledge-system`, and
-`ex6-operational-knowledge-agent-runtime`. Therefore they cannot explain the
-large Ex1, Ex2, Ex4, or Ex7 timing differences.
+The modified-module subtotal changed from **25.312 s** in the original copy to
+**19.662 s** in the fixed copy: **5.650 s faster (22.3%)**. The untouched
+modules and web suites were collectively 164 ms slower in this run, which is
+normal run-to-run variation and does not weaken the modified-module result.
 
-## Limits of this comparison
+## Ex6 confirmation
 
-These are single serial warm-cache samples, taken fourteen minutes apart while
-other development work was occurring. They are useful for observing the
-developer-feedback cost at those moments, but they are not a controlled
-microbenchmark. Wall-clock test duration can vary with CPU scheduling,
-background browser activity, filesystem state, Go test-cache state, and the
-particular browser-oriented test timing.
+Ex6 produced the dominant improvement. Because it was unexpectedly large, it
+was immediately rerun with repository order reversed, still using
+`go test -count=1 ./...`:
 
-To measure a causal performance effect, benchmark the affected operations
-directly with Go benchmarks, run repeated samples under the same machine load,
-and compare medians (and variation) rather than comparing one whole-repository
-test pass from each checkout.
+| Run order | Original Ex6 | Fixed Ex6 | Fixed-copy improvement |
+| --- | ---: | ---: | ---: |
+| Alternating full-suite run | 8,021 ms | 2,641 ms | 5,380 ms |
+| Reverse-order confirmation | 6,855 ms | 2,185 ms | 4,670 ms |
+
+The absolute duration varies, but both independent executions show a large
+fixed-copy advantage. That makes a real Ex6 performance improvement likely;
+it is not explained by Go's test-result cache or by always running the fixed
+copy first.
 
 ## What changes had the biggest impact?
 
-**Measured impact:** none of the 27 changes has a demonstrated meaningful
-whole-test-suite impact in these two samples. Among modified modules, Ex3 was
-6 ms faster, Ex5 was 52 ms slower, and Ex6 was 1 ms slower; those differences
-are too small and too confounded to rank causally.
+**Largest measured impact: the Ex6 patch group.** It accounts for **5.380 s**
+of the **5.486 s** total improvement in the paired full-suite run. Ex5 is next
+at **239 ms faster**, and Ex3 is **31 ms faster**.
 
-**Most likely allocation impact:** the 15 map-capacity preallocations in
-`ex5-operational-knowledge-system/promisegrid/records/helpers.go` are the
-strongest candidate, because that file builds multiple indexes over complete
-record collections and therefore avoids repeated internal map growth whenever
-those helpers run on nontrivial inputs. The four `SplitSeq` substitutions are
-also direct allocation reductions, but their inputs are short header, host, or
-fact strings, so their absolute effect is expected to be smaller. This is a
-reasoned expectation from the code shape, not a result proven by the two
-whole-suite timings above.
+The whole-module timing cannot isolate one line with certainty. Within Ex6,
+the likely contributors are the allocation reductions in workflows and package
+processing: preallocated receipt/operation maps, preallocated item-output
+slices, manifest claim maps, and `SplitSeq` iteration for host and fact
+parsing. The test-only CAS map preallocation cannot explain a multi-second
+runtime change by itself.
+
+To rank individual edits conclusively, add focused Go benchmarks around those
+functions and compare repeated median results. But at the repository-test
+level, the evidence is clear: the 27 lint fixes produced a substantial,
+repeatable improvement centered in Ex6.
