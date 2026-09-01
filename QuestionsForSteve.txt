@@ -1,0 +1,13 @@
+Questions for Steve
+
+NINIK / Pure Derivation
+
+If pure derivation depends on exact inputs, function, policy/context, prior state, and runtime CIDs, isn't there always some real-world factor that cannot be fully accounted for? Where does PromiseGrid draw the boundary between what must be captured for a derivation to be considered reproducible and what is intentionally left to external effects/readback?
+
+How do we decide which real-world variables belong in derivation context versus being handled later through observation/readback?
+
+What criteria do we use to decide that a view is practically rebuildable, not just theoretically rebuildable?
+
+How strong does readback evidence need to be before we treat an external effect as confirmed?
+
+How do we avoid making people feel like they must constantly prove they completed work when PromiseGrid requires readback or evidence for external effects?
