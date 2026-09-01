@@ -1,251 +1,330 @@
-# NINIK And CD Int: A Plain-English Guide To The Open Problems
+# NINIK In CD Int: The Five Questions Answered In Code
 
-This companion explains the NINIK/CD Int questions for someone who did not
-write this code and does not need to become a Go programmer to understand why
-the questions matter.
+This guide takes the five questions from `QuestionsForSteve.txt` and answers
+them from the existing CD Int design records and experimental code. Each section
+shows the relevant files and a short code segment so you can see where the
+answer comes from.
 
-It is based on the evidence trace in `NINIK-CDInt-trace.md`. It does **not**
-choose the architecture or answer the design questions for Steve. Instead, it
-explains the situation in everyday terms so you can see what Steve is being
-asked to decide.
+The important overall result is simple: **these are not five requests for a
+redesign.** They describe rules the NINIK primitives already provide. The code
+is experimental and incomplete in places, but it follows the intended shape.
 
-## The Very Short Version
+## 1. If Pure Derivation Depends On Exact Inputs, Where Does It Stop And The Real World Begin?
 
-CD Int is trying to keep a trustworthy history of what happened while working
-with other systems, especially QuickBooks and OSC. It wants to be able to look
-back later and say:
+### The question
 
-> Here is the exact information we used, here is the exact rule/program that
-> used it, here is the action we tried, and here is what we later observed.
+If a calculation needs exact inputs, rules, prior state, and runtime identity,
+isn't there always some real-world fact left out? Where is the boundary between
+a reproducible calculation and something that must be checked later?
 
-That is a strong and sensible goal. The hard part is that a computer program
-does not control the real world. It can calculate an invoice total perfectly,
-but it cannot guarantee that a QuickBooks write completed if the connection
-dropped at the wrong moment. It cannot recreate a fact that was never saved.
+### The answer
 
-The NINIK questions are asking where to draw those boundaries in a clear,
-practical, and humane way.
+The boundary is whether the program is only calculating from recorded facts, or
+whether it is trying to learn about or change something outside those facts.
 
-## A Few Words You Need
+- A calculation is pure when every fact that can change its answer is supplied
+  as recorded input.
+- QuickBooks, OSC, UPS, a file, or a process are outside the calculation.
+- The program can calculate a request for an outside action, but it cannot claim
+  the action happened until the outside system is observed afterward.
 
-You do not need to memorize these. They are just the vocabulary used in the
-documents.
+This is why NINIK has both **Pure derivation** and **External effect adapter**.
+They are deliberately different jobs.
 
-### CID: a fingerprint for exact data
+### The design record that says this
 
-A CID is like a very specific fingerprint for a file or piece of data. If the
-data changes even a little, it gets a different CID. So saying “this result was
-calculated from CID X” is much stronger than saying “it was calculated from the
-order spreadsheet.” CID X points to the exact bytes that were used.
+`docs/thought-experiments/TE-dovid-canonical-erp-event-model.md`, lines 43–49:
 
-### Pure derivation: a repeatable calculation
+```text
+the result must cite explicit input CIDs, function CIDs, policy/context CIDs,
+CAS frontiers or branch heads, and runtime/app roots.
 
-Think of a recipe. If you have the same ingredients, the same recipe, and the
-same instructions, you should get the same cake. In CD Int, a pure derivation
-is that kind of calculation: same recorded inputs and same recorded rules should
-produce the same result.
+External writes to QuickBooks, OSC, UPS, banks, card processors, or files are
+side effects isolated at adapter agents.
+```
 
-For example: take a saved order, a saved tax policy, and a saved version of the
-calculation rules; then produce a proposed invoice. That is something another
-person should be able to repeat later.
+In plain English: the first paragraph describes the saved recipe for repeating
+a calculation. The second says that writing to another system is not part of
+that recipe.
 
-### External effect: something outside the program changes
+### The code that does it
 
-Sending an invoice into QuickBooks, changing an OSC order status, buying a UPS
-label, writing a file, or starting a process are external effects. They affect
-something outside the calculation itself.
+`x/cas-native-index/synchronization_experiment_run.go` records a requested
+change before it calls the outside peer:
 
-This is like clicking “submit” on a web form. You may see a spinner, your Wi-Fi
-may cut out, and you may not know whether the website received the form. The
-program cannot solve that uncertainty just by calculating again.
+```go
+requestCID, err := experiment.journals[sourceRole].Append(SynchronizationPayload{
+    Action: "promise", Operation: "change-request",
+    Request: &ChangeRequestPayload{
+        OperationID: request.OperationID, TargetPeer: targetRole, Record: request.Record,
+        PolicyCID: Tag42FromCID(experiment.policyCID), CodeCID: Tag42FromCID(experiment.codeCID),
+    },
+})
+result, applyErr := target.ApplyChange(request)
+```
 
-### Readback: checking what happened afterward
+The first part saves what it intends to do. `ApplyChange` is the moment it asks
+the outside peer to change. Those are not treated as the same thing.
 
-Readback means asking the outside system what it now says. If a QuickBooks
-write might have succeeded but its reply was lost, CD Int can look up the
-expected invoice afterward. That is safer than clicking submit again and hoping
-it does not create a duplicate.
+### What this means for you
 
-### View: a helpful local copy, not the official history
+The system is not supposed to capture every fact in the universe. It must
+capture the facts that affect a calculation. Facts it cannot control or safely
+assume—such as the current state of QuickBooks—are handled as observations.
 
-An index, queue, cache, or dashboard is a view. It helps the program find and
-display information quickly. The goal is that losing one should be annoying,
-not disastrous: it should be possible to recreate it from the durable history.
+There is no NINIK redesign problem here. The experiment carries only some of
+the full provenance fields described by the design, which is normal unfinished
+prototype work rather than a contradiction.
 
-## What The Existing Code Already Does
+## 2. How Does It Decide Between A Calculation Input And A Later Observation?
 
-The repository contains an experimental synchronization system under
-`x/cas-native-index`. “Experimental” is important: it is a working testbed, not
-a claim that every production rule has been settled.
+### The question
 
-One good safety behavior is already implemented. Imagine Quinn, the program
-role talking to an outside system, sends a change. The outside system applies it
-but the response disappears because of a network problem. The experiment does
-not immediately send the same change again. It records that the result is
-unknown, performs a targeted readback using the operation ID, and records what
-it finds. This reduces the risk of creating the same invoice or change twice.
+How do we decide which real-world variables belong in the calculation context
+and which should be handled through observation or readback later?
 
-Another real example is the CARv1 storage experiment. Its fast lookup map lives
-in memory. When the storage opens again, it scans the durable CAR files and
-rebuilds that map. This shows one limited kind of “rebuildable view” actually
-working.
+### The answer
 
-Those are useful pieces. The open questions are about turning useful pieces
-into a clear, consistent system rather than assuming that one experiment proves
-everything.
+Use the role the fact plays:
 
-## Problem 1: What Must Be Saved To Repeat A Calculation?
+- If it is used to calculate or choose the result, save it first as an input.
+- If it is learned by looking at an outside system, record it as an observation.
+- If it is learned after attempting a write in order to learn whether that
+  write happened, it is readback.
 
-Suppose a program recommends charging $103.20. Months later, somebody asks,
-“Why that amount?” A strong answer needs more than the final number. It should
-show the order, tax rule, price rule, and calculation version that led to it.
+For example: a saved order is calculation input. A fresh QuickBooks customer
+lookup is an observation. Looking up a specific invoice after a failed network
+response is readback.
 
-The NINIK design describes a full receipt for a calculation: exact inputs,
-function/code, policy/context, prior state, and runtime version. This is like
-keeping the ingredients, recipe, oven settings, and version of the recipe app.
+### The code that stores the evidence
 
-The current synchronization experiment records some of this. In particular, a
-change request has a code CID and policy CID. But it does not have a general
-field for every input CID, the earlier state/frontier used, or the runtime/app
-root. It also embeds a record directly in the message instead of always linking
-to a separately CID-addressed input.
+`x/cas-native-index/qbxml_request.go` defines what a QuickBooks request keeps
+with it:
 
-Why this matters: without an agreed minimum receipt, two developers may each
-think they have made a calculation reproducible while saving different things.
-Later, someone may be unable to tell whether a changed result came from changed
-data, changed policy, changed code, or a changed running environment.
+```go
+type QBXMLRequest struct {
+    ExternalSourceCID      cid.Cid
+    QBXMLCID               cid.Cid
+    SourceMessageCIDs      []cid.Cid
+    CanonicalEventCIDs     []cid.Cid
+    OperatorDecisionCIDs   []cid.Cid
+}
+```
 
-This is not a request for you to decide which fields to add. It is the question
-for Steve: what is the smallest complete record for each kind of calculation,
-and which parts can legitimately differ by protocol?
+Those links let a later person answer: what source material was used, what
+canonical facts were involved, and who approved the request. The request is
+evidence of intent; it is not proof that QuickBooks changed.
 
-## Problem 2: When Is Something An Input, And When Is It A New Observation?
+### The planned workflow
 
-Some facts are easy: a saved order is an input to a calculation. Some are not:
-“What is QuickBooks showing right now?” may change while the program runs.
+`docs/design-and-rollout.md`, lines 922–933, describes the next steps:
 
-Here is a useful ordinary example. A grocery list is a stable input to planning
-dinner. Whether the grocery store still has milk is not a stable input unless
-you check and save that observation. The store can change its shelves after you
-look.
+```text
+qsync requests qagent to attempt the approved QBXML side effect,
+stores raw request/response evidence through CAS-backed storage, and then
+observes QuickBooks to prove projected, pending, drifted, failed-side-effect,
+duplicate-risk, or correction-required state.
+```
 
-CD Int already says, broadly, that QuickBooks and OSC are external systems. It
-has request objects that link useful evidence such as the source, canonical
-events, and an operator decision. But it has no simple written rule for the
-gray areas. Is a QuickBooks customer lookup part of the calculation? Is it a
-safety check before writing? Is it proof after writing? The answer changes what
-should be saved and when it should be read.
+So the project does not blur calculation, request, and later observation into
+one claim. Each becomes its own piece of evidence.
 
-Why this matters: if the boundary is vague, the same fact might be treated as a
-reliable input in one feature and as a temporary outside observation in another.
-That can make retries, audits, and disagreement handling inconsistent.
+### What this means for you
 
-The developer does not need to invent a new system first. The sensible evidence
-work is to list what each operation reads and label it: saved evidence, local
-temporary state, outside observation, or outside command/result. The missing
-labels become the actual questions for Steve.
+The question has a usable answer: classify a fact by when and why it is learned.
+It is input when it helps produce the answer; it is observation when it reports
+the outside world; it is readback when it checks a requested outside change.
 
-## Problem 3: “Rebuildable” Needs A Test You Can Trust
+There is no redesign problem here. A developer may still need to make each
+operation's fields explicit, but the NINIK distinction is already doing the
+organizing work.
 
-Calling something rebuildable means you can throw away the convenient copy and
-make it again from the important records. This is a little like deleting a
-music-app playlist cache: it is fine only if the app can recreate the playlist
-from your saved songs and preferences.
+## 3. What Makes A View Really Rebuildable?
 
-The CARv1 test is encouraging because it demonstrates this for one map used to
-find blocks in storage. The project also says that review queues, indexes, TUI
-state, conflict summaries, and approval state should be reconstructible from
-durable CAS/timeline records.
+### The question
 
-But “it rebuilt” can mean several different things:
+What makes a local view practically rebuildable instead of merely theoretically
+rebuildable?
 
-- It found the same data.
-- It found the same data from the same chosen point in history.
-- It finished soon enough to be usable.
-- It clearly tells you when a needed input is missing.
-- It does not accidentally redo an external action while rebuilding.
+### The answer
 
-The repository has not yet chosen one common checklist for all those meanings.
-That is the mismatch. The goal exists, and one narrow example works, but the
-project does not yet have a shared finish line for saying, “This view is truly
-safe to delete and rebuild.”
+It is practically rebuildable when you can remove the convenient local copy,
+start from the durable records, recreate it, and get the same useful answer
+without repeating an outside action.
 
-## Problem 4: A Readback Is Helpful, But When Is It Enough?
+Think of a music-app search index. It is fine to lose only when the app can
+recreate it from the actual music library. It is not fine to lose when it was
+the only place that knew what songs you owned.
 
-The existing experiment treats a lost response responsibly. It does not claim a
-failed network response means the outside action failed. Instead it says, “We
-do not know,” then it looks.
+### The code example
 
-That is excellent as far as it goes. But a readback can be stronger or weaker
-depending on the outside system. Seeing an invoice with the expected ID may be
-good evidence. Seeing a similar invoice with no stable ID may be weak evidence.
-Seeing an invoice once may not prove it will still be there after a system
-restore. Some systems provide versions or idempotency keys; others do not.
+`x/cas-native-index/application_storage_migration_experiment_carv1.go` says
+that the fast placement map is disposable:
 
-So the missing decision is not “should we read back?” The existing documents
-already favor that for uncertain writes. The missing decision is “what facts
-must readback show before this particular adapter is allowed to say confirmed?”
+```go
+// Its in-memory placement map is disposable and rebuilt from the CAR
+// files at every open.
+type carV1Container struct {
+    placement map[string]carV1Placement
+}
 
-This matters because a too-weak confirmation could allow later work to depend
-on something that did not really happen. A too-heavy confirmation rule could
-slow normal work or demand unnecessary human attention. Steve needs to set the
-right requirements per kind of external system, and decide whether there is a
-small common minimum.
+func openCARV1Container(rootPath string) (*carV1Container, error) {
+    container := &carV1Container{
+        rootPath: rootPath, placement: make(map[string]carV1Placement),
+    }
+    if err := container.rebuildPlacement(); err != nil {
+        return nil, err
+    }
+    return container, nil
+}
+```
 
-## Problem 5: Trustworthy Evidence Must Not Turn Into Homework
+The map is not saved as the truth. On startup, the program rebuilds it by
+checking the durable CAR files. This is an actual working example, not just a
+theory.
 
-The fear behind the final question is understandable: if the system says every
-real-world action needs evidence, does that mean a person must constantly stop,
-take screenshots, write explanations, and prove they did their job?
+### The rule for broader views
 
-The intended direction in the repository is better than that. The software and
-adapters should automatically retain requests, responses, readbacks, and
-reconciliation information. A person should be brought in mainly when a real
-decision is needed: approving a meaningful external change, resolving a
-conflict, or deciding what to do after uncertainty.
+`TODO/TODO-pidaj-poc19-poc20-alignment.md` records `DI-rudum`:
 
-The gap is that this user experience is not yet written down as a rule. The
-current material says what evidence is valuable, but not clearly enough which
-evidence happens quietly in the background and which moments must interrupt a
-person for approval.
+```text
+Prove that review queues, root-adoption status, conflict summaries,
+prior-action warnings, replay indexes, and approval state can be deleted and
+rebuilt from CAS/timeline records before operators depend on the TUI.
+```
 
-Why this matters: a technically perfect audit system can still feel awful if it
-asks people to act like its data-entry clerks. A good system should collect
-routine proof automatically, show the important facts when a decision is truly
-needed, and avoid making the user repeat information the computer already has.
+### What this means for you
 
-## What You Can Take To Steve
+“Rebuildable” is not supposed to mean “we hope we could recreate it.” It means
+there should be a test like the CARv1 startup test: remove the fast copy, rebuild
+from durable evidence, and verify that it works.
 
-You do not need to ask Steve to explain all of CD Int. These are the focused
-things that would make the project clearer:
+There is no redesign problem here. CD Int already chose the correct direction;
+the remaining work is to add that kind of proof for more views.
 
-1. For each kind of pure calculation, what is the minimum saved “recipe card”
-   needed to reproduce and explain it?
-2. What simple rule tells a developer whether a fact is an input, an external
-   observation, or readback evidence?
-3. What must a rebuild test prove before a local view can honestly be called
-   disposable?
-4. For each external adapter, what exact observation is enough to call a write
-   confirmed, and what leaves it uncertain?
-5. Which evidence should be automatic, and what rare situations genuinely need
-   a person to decide?
+## 4. How Strong Must Readback Be Before An Effect Is Confirmed?
 
-Those questions do not accuse the current code of being bad. They identify the
-places where the code, experiments, and design direction have not yet been
-joined by a single clear rule.
+### The question
 
-## Where This Came From
+How much readback evidence is enough before we say an external effect really
+happened?
 
-The technical evidence is in the companion trace and in this repository:
+### The answer
 
-- `docs/thought-experiments/TE-dovid-canonical-erp-event-model.md` describes
-  the full provenance expected for derived results.
-- `x/cas-native-index/synchronization_experiment.go` and
-  `synchronization_experiment_run.go` show the experimental request/attempt/
-  readback flow.
-- `x/cas-native-index/application_storage_migration_experiment_carv1.go` shows
-  one real placement-map rebuild at store open.
-- `TODO/TODO-pidaj-poc19-poc20-alignment.md` records the project decision that
-  projection rebuild must be proved before operators depend on it.
-- `docs/design-and-rollout.md` describes the planned QuickBooks reconciliation
-  and operator approval flow.
+It must connect what the outside system now shows to the exact action the
+program requested. If it cannot make that connection, the result remains
+uncertain.
+
+The exact check depends on the outside system. A system with a stable operation
+ID and a version can give stronger proof than one that only returns a similar
+looking record. The important rule is: do not turn uncertainty into success just
+because a network response was lost.
+
+### The code that handles a lost response
+
+`x/cas-native-index/synchronization_experiment_run.go` does this:
+
+```go
+if applyErr != nil {
+    outcome = "unknown"
+}
+
+reader, ok := target.(PeerReadbackReader)
+if !ok {
+    return nil, errors.New("uncertain write target has no readback capability")
+}
+readback, err := reader.Readback(PeerReadbackRequest{
+    OperationID: request.OperationID,
+    Family: request.Record.Family,
+    RecordID: request.Record.RecordID,
+})
+```
+
+The code does not retry blindly. It changes the outcome to `unknown`, then asks
+the peer about that specific operation and record.
+
+The test proves the intended behavior in the experiment:
+
+```go
+if !readback.Applied || readback.Record.RecordID != record.RecordID {
+    t.Fatalf("readback = %+v, want applied record %s", readback, record.RecordID)
+}
+if second.Status != "already-applied" {
+    t.Fatalf("repeat apply status = %q, want already-applied", second.Status)
+}
+```
+
+### What this means for you
+
+Readback is not a vague “we checked.” It is a check for the particular requested
+change, using the strongest identity/version/field evidence that the external
+system can provide. If that link is not strong enough, the system should say
+“unknown” and wait for safe reconciliation or human judgment.
+
+There is no redesign problem here. The actual strength has to be tailored to
+each adapter because QuickBooks, OSC, UPS, and a file system do not offer the
+same kinds of proof.
+
+## 5. How Does This Avoid Making People Constantly Prove Their Work?
+
+### The question
+
+How can PromiseGrid require evidence for external effects without making people
+feel that they must constantly prove they completed ordinary work?
+
+### The answer
+
+The software should gather routine evidence itself. The person should be asked
+to make decisions, not to reconstruct technical proof that the software was in
+a better position to collect.
+
+For a normal successful action, the adapter can automatically retain the
+request, outside-system response, readback, and reconciliation result. A human
+is needed when authority or judgment is genuinely needed: approving a meaningful
+external change, choosing between conflicting facts, or handling an uncertain
+result.
+
+### The design record that supports this
+
+`docs/design-and-rollout.md`, lines 303–315:
+
+```text
+QuickBooks projections do not run without separate operator approval, and
+failed or unknown QuickBooks side effects create CAS reconciliation/correction
+promises rather than overwriting CAS facts.
+```
+
+The human approval is for the consequential external action. The system keeps
+the technical evidence and does not erase an uncertain or failed outcome.
+
+`TODO/TODO-pidaj-poc19-poc20-alignment.md`, `DI-bisir`, adds that conflict and
+operator-decision records preserve the evidence rather than hiding it in the
+user interface.
+
+### What this means for you
+
+The intended experience is not “prove every task.” It is “the system keeps the
+receipts; you decide when a real decision belongs to you.” If everything goes
+normally, most evidence collection should be invisible.
+
+There is no redesign problem here. The detailed user interface is still future
+work, but the model itself puts evidence collection on the software and adapter
+side, not on the person doing normal work.
+
+## Final Takeaway
+
+The five questions all have answers inside the NINIK model and the current CD
+Int direction:
+
+1. Record the inputs to calculations; treat outside changes as effects plus
+   later observation.
+2. Classify facts by their role: input, observation, or post-write readback.
+3. Prove a view is rebuildable by deleting/recreating it from durable evidence.
+4. Confirm effects by linking readback to the exact requested change; otherwise
+   preserve uncertainty.
+5. Let the software collect evidence automatically; involve people for genuine
+   authority and judgment.
+
+The experimental code does not yet implement every planned detail. That is work
+to complete, test, and refine. It is not evidence that Steve must redesign the
+eight NINIK primitives or the three supporting mechanisms.
