@@ -7,26 +7,6 @@ It covers:
 - how the backend works and where the code lives
 - the CLI, including how to scan a specific branch
 
-## How to regenerate this file
-
-Use the Makefile target from the repo root:
-
-```bash
-make demo-doc
-```
-
-By default this writes to:
-
-```text
-~/Documents/todo-demo.md
-```
-
-You can override the output path:
-
-```bash
-make demo-doc DEMO_DOC=/tmp/todo-demo.md
-```
-
 ## 1. Webpage Cheatsheet
 
 ### Main pages
@@ -167,139 +147,39 @@ make demo-doc DEMO_DOC=/tmp/todo-demo.md
 
 ### Local launcher
 
-From this repo, the simplest way to run the tool is:
-
-```bash
-./todo-report health --repo ~/lab/cswg/coordination --branch jj --format text
-```
-
-If you want the bare command:
-
-```bash
-go install ./cmd/todo-report
-todo-report health --repo ~/lab/cswg/coordination --branch jj --format text
-```
+The CLI is the source that produces the repo scans and the published reports.
+It can inspect a single repo, a monorepo with many TODO indexes, or a fleet of repos.
 
 ### Core commands
 
-- `age`
-  Show TODO age from Git history.
-- `drift`
-  Compare TODO state across two branches.
-- `lint`
-  Validate TODO structure.
-- `health`
-  Summarize repo health.
-- `indexes`
-  Discover all authoritative `TODO/TODO.md` indexes in a repo.
-- `detect`
-  Show what TODO shapes and compatibility patterns were found.
-- `fleet health`
-  Scan many repos and show one combined health report.
-- `fleet report daily`
-  Publish the manager-facing HTML, markdown, and JSON report set.
+- `age` measures how old TODOs are from Git history.
+- `drift` compares TODO state across two branches.
+- `lint` checks whether the TODO structure is valid.
+- `health` combines age, lint, and optional branch comparison into one repo summary.
+- `indexes` discovers every authoritative `TODO/TODO.md` index in a repo.
+- `detect` reports which TODO shapes the repo uses.
+- `fleet health` scans many repos and rolls them into one report.
+- `fleet report daily` publishes the manager-facing HTML, markdown, and JSON outputs.
 
 ### How to specify a branch
 
-#### Single repo scan
-
-```bash
-./todo-report health --repo ~/lab/cswg/coordination --branch jj --format text
-```
-
-This scans the `jj` branch for that repo.
-
-#### Single repo lint on `main`
-
-```bash
-./todo-report lint --repo ~/lab/cswg/coordination --branch main --format text
-```
-
-#### Compare two branches directly
-
-```bash
-./todo-report drift --repo ~/lab/cswg/coordination --branch-a main --branch-b jj --format text
-```
-
-#### Health on one branch, drift against another
-
-```bash
-./todo-report health --repo ~/lab/cswg/coordination --branch main --compare jj --format text
-```
-
-This keeps the main repo counts anchored to `main`, then adds drift against `jj`.
-
-#### Scan all indexes in a monorepo on a specific branch
-
-```bash
-./todo-report health --repo ~/lab/wire-lab --branch main --all-indexes --format text
-```
-
-#### Scan a specific nested index on a specific branch
-
-```bash
-./todo-report health \
-  --repo ~/lab/wire-lab \
-  --branch main \
-  --index protocols/wire-lab.d/TODO/TODO.md \
-  --format text
-```
+- For single-repo commands such as `age`, `lint`, `health`, `detect`, and `indexes`, use `--branch` to choose the branch to scan.
+- If `--branch` is omitted:
+  - local repos use the currently checked-out branch
+  - remote repos use the repo’s default branch
+- For direct branch comparison, `drift` uses `--branch-a` and `--branch-b`.
+- For a summary that stays anchored to one branch but also shows differences from another branch, `health` uses `--branch` together with `--compare`.
+- For monorepos, `health` can scan all discovered indexes on the selected branch with `--all-indexes`.
+- For repos with a nested authoritative TODO index, `health`, `lint`, and `detect` can target that index with `--index`.
 
 ### Fleet scanning
 
-#### Repo list with one branch for all repos
-
-```bash
-./todo-report fleet health --repo-list repos.txt --branch main --all-indexes --format text
-```
-
-#### Inline repos with one branch for all repos
-
-```bash
-./todo-report fleet health \
-  --repo ~/lab/cswg/coordination \
-  --repo ~/lab/wire-lab \
-  --branch main \
-  --all-indexes \
-  --format text
-```
-
-#### Publish the daily fleet report
-
-```bash
-./todo-report fleet report daily --config fleet.json
-```
+- `fleet health` can scan a repo list file, repeated repo arguments, or a JSON config.
+- `fleet report daily` publishes the manager-facing report set from the same fleet inputs.
+- A fleet run can apply one branch to many repos from the command line.
+- A fleet run can also use repo-specific branch overrides from config.
 
 ### Branch selection through config
-
-Example:
-
-```json
-{
-  "default_branch": "main",
-  "compare_branch": "jj",
-  "all_indexes": true,
-  "reports_dir": "reports",
-  "repos": [
-    {
-      "repo": "~/lab/cswg/coordination",
-      "daily": true
-    },
-    {
-      "repo": "~/lab/wire-lab",
-      "branch": "main",
-      "all_indexes": true,
-      "daily": true
-    },
-    {
-      "repo": "https://github.com/ciwg/grid-examples",
-      "branch": "main",
-      "compare_branch": "jj",
-      "daily": true
-    }
-  ]
-}
-```
 
 What each branch field means:
 
@@ -311,15 +191,6 @@ What each branch field means:
   Per-repo branch override.
 - `repos[].compare_branch`
   Per-repo compare override.
-
-### Good demo commands
-
-```bash
-./todo-report indexes --repo ~/lab/wire-lab --branch main --format text
-./todo-report detect --repo ~/lab/wire-lab --branch main --all-indexes --format text
-./todo-report fleet health --repo-list repos.txt --branch main --all-indexes --format markdown
-./todo-report fleet report daily --config fleet.json
-```
 
 ### Demo talking points
 
