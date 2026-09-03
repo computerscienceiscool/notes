@@ -7,6 +7,26 @@ It covers:
 - how the backend works and where the code lives
 - the CLI, including how to scan a specific branch
 
+## How to regenerate this file
+
+Use the Makefile target from the repo root:
+
+```bash
+make demo-doc
+```
+
+By default this writes to:
+
+```text
+~/Documents/todo-demo.md
+```
+
+You can override the output path:
+
+```bash
+make demo-doc DEMO_DOC=/tmp/todo-demo.md
+```
+
 ## 1. Webpage Cheatsheet
 
 ### Main pages
