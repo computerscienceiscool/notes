@@ -7,6 +7,12 @@ It covers:
 - how the backend works and where the code lives
 - the CLI, including how to scan a specific branch
 
+## Quick commands
+
+- `make demo-doc` regenerates this handout.
+- `make run-daily` publishes the latest manager-facing fleet report.
+- `make commit` runs build, test, vet, and errcheck.
+
 ## 1. Webpage Cheatsheet
 
 ### Main pages
